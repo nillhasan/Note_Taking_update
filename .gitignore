@@ -65,4 +65,5 @@ debug.keystore
 .env
 *.apk
 *.aab
+.agents/mcp_config.json
 
