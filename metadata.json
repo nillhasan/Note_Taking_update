@@ -1,0 +1,7 @@
+{
+  "name": "NoteFlow AI",
+  "description": "AI-powered voice and meeting notes with real-time sync, transcription, action items, and sharing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

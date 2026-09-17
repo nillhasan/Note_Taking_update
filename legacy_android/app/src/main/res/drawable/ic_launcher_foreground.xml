@@ -1,0 +1,48 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- NoteFlow AI icon centered in 66dp safe zone (21..87) -->
+    <!-- Document Base Sheet -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,28 L64,28 L74,38 L74,78 C74,80.2 72.2,82 70,82 L38,82 C35.8,82 34,80.2 34,78 L34,32 C34,29.8 35.8,28 38,28 Z" />
+    
+    <!-- Document Fold -->
+    <path
+        android:fillColor="#CBD5E1"
+        android:pathData="M64,28 L64,38 L74,38 Z" />
+
+    <!-- Audio Waveform Bars superimposed on document -->
+    <!-- Bar 1 -->
+    <path
+        android:fillColor="#2563EB"
+        android:pathData="M42,52 L45,52 C45.6,52 46,52.4 46,53 L46,65 C46,65.6 45.6,66 45,66 L42,66 C41.4,66 41,65.6 41,65 L41,53 C41,52.4 41.4,52 42,52 Z" />
+
+    <!-- Bar 2 (Taller) -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M48,46 L51,46 C51.6,46 52,46.4 52,47 L52,71 C52,71.6 51.6,72 51,72 L48,72 C47.4,72 47,71.6 47,71 L47,47 C47,46.4 47.4,46 48,46 Z" />
+
+    <!-- Bar 3 (Peak) -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M54,42 L57,42 C57.6,42 58,42.4 58,43 L58,75 C58,75.6 57.6,76 57,76 L54,76 C53.4,76 53,75.6 53,75 L53,43 C53,42.4 53.4,42 54,42 Z" />
+
+    <!-- Bar 4 (Medium) -->
+    <path
+        android:fillColor="#0284C7"
+        android:pathData="M60,48 L63,48 C63.6,48 64,48.4 64,49 L64,69 C64,69.6 63.6,70 63,70 L60,70 C59.4,70 59,69.6 59,69 L59,49 C59,48.4 59.4,48 60,48 Z" />
+
+    <!-- Bar 5 -->
+    <path
+        android:fillColor="#2563EB"
+        android:pathData="M66,55 L69,55 C69.6,55 70,55.4 70,56 L70,62 C70,62.6 69.6,63 69,63 L66,63 C65.4,63 65,62.6 65,62 L65,56 C65,55.4 65.4,55 66,55 Z" />
+
+    <!-- AI Sparkle / Star at top right -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M73,26 C73,28.8 75.2,31 78,31 C75.2,31 73,33.2 73,36 C73,33.2 70.8,31 68,31 C70.8,31 73,28.8 73,26 Z" />
+</vector>
+
