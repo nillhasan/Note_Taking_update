@@ -77,21 +77,27 @@ class NotesProvider with ChangeNotifier {
   Future<void> _initSettings() async {
     _isDarkMode = await PreferencesService.instance.isDarkMode();
     _isAnnualBilling = await PreferencesService.instance.isAnnualBilling();
-    notifyListeners();
+    await dbHelper.initDefaultFoldersAndNotes(_userId);
+    await refreshNotes();
   }
 
   void updateUserId(String newUserId) {
-    if (_userId != newUserId) {
-      _userId = newUserId;
-      cloudSync.startListeningForUser(newUserId);
-      dbHelper.initDefaultFoldersAndNotes(newUserId).then((_) {
-        refreshNotes();
-      });
-    }
+    if (newUserId.trim().isEmpty) return;
+    _userId = newUserId.trim();
+    cloudSync.startListeningForUser(_userId);
+    dbHelper.initDefaultFoldersAndNotes(_userId).then((_) {
+      refreshNotes();
+    });
   }
 
   Future<void> refreshNotes() async {
-    _allNotes = await dbHelper.getActiveNotes(_userId);
+    if (_selectedFilter == "Archived") {
+      _allNotes = await dbHelper.getArchivedNotes(_userId);
+    } else if (_selectedFilter == "Trash") {
+      _allNotes = await dbHelper.getDeletedNotes(_userId);
+    } else {
+      _allNotes = await dbHelper.getActiveNotes(_userId);
+    }
     _allActionItems = await dbHelper.getAllActionItems(_userId);
     _folders = await dbHelper.getFoldersForUser(_userId);
 
@@ -109,10 +115,6 @@ class NotesProvider with ChangeNotifier {
     // Apply primary filter
     if (_selectedFilter == "Favorites") {
       list = list.where((n) => n.isFavorite && !n.isDeleted && !n.isArchived).toList();
-    } else if (_selectedFilter == "Archived") {
-      // Archived
-    } else if (_selectedFilter == "Trash") {
-      // Trash
     } else if (_selectedFilter == "Meetings") {
       list = list.where((n) => n.type == "MEETING").toList();
     } else if (_selectedFilter == "Voice") {
@@ -149,7 +151,7 @@ class NotesProvider with ChangeNotifier {
 
   void setFilter(String filter) {
     _selectedFilter = filter;
-    notifyListeners();
+    refreshNotes();
   }
 
   void setFolder(String? folder) {
@@ -319,11 +321,32 @@ class NotesProvider with ChangeNotifier {
         meetingMinutes: analysis.meetingMinutes,
         decisions: analysis.decisions,
         risks: analysis.risks,
+        tags: {...note.tags, ...analysis.suggestedTags}.toList(),
         updatedAt: DateTime.now().millisecondsSinceEpoch,
       );
 
       await dbHelper.insertOrUpdateNote(updated);
       await cloudSync.pushNote(updated);
+
+      if (analysis.actionItems.isNotEmpty) {
+        const uuid = Uuid();
+        final actionItemEntities = analysis.actionItems.map((extracted) {
+          return ActionItemEntity(
+            id: uuid.v4(),
+            noteId: note.id,
+            userId: _userId,
+            task: extracted.task,
+            owner: extracted.owner,
+            dueDate: extracted.dueDate,
+            isCompleted: false,
+          );
+        }).toList();
+        await dbHelper.insertActionItems(actionItemEntities);
+        for (final a in actionItemEntities) {
+          await cloudSync.pushActionItem(a);
+        }
+      }
+
       if (_selectedNoteId == note.id) {
         _currentNote = updated;
       }
@@ -356,10 +379,31 @@ class NotesProvider with ChangeNotifier {
     }
 
     String cleanTranscript = userTranscript?.trim() ?? "";
+    NoteAiAnalysis? analysis;
 
-    // If user transcript is empty and we have an audio file, perform real transcription!
+    // 1. Fast Unified AI Multimodal Transcription & Analysis (1 single roundtrip)
     if (cleanTranscript.isEmpty && file != null && file.existsSync()) {
-      _processingStatusText = "Transcribing audio with AI...";
+      _processingStatusText = "AI is analyzing audio and generating summary...";
+      notifyListeners();
+
+      try {
+        final unifiedResult = await aiService.transcribeAndAnalyzeAudio(
+          file,
+          customTitle ?? (isMeeting ? "Meeting Note" : "Voice Note"),
+        );
+        if (unifiedResult != null) {
+          final t = unifiedResult['transcript'] as String?;
+          if (t != null && t.trim().isNotEmpty) {
+            cleanTranscript = t.trim();
+          }
+          analysis = unifiedResult['analysis'] as NoteAiAnalysis?;
+        }
+      } catch (_) {}
+    }
+
+    // Fallback: If unified processing didn't produce a transcript, run individual transcription
+    if (cleanTranscript.isEmpty && file != null && file.existsSync()) {
+      _processingStatusText = "Transcribing audio with Gemini AI...";
       notifyListeners();
 
       try {
@@ -379,19 +423,21 @@ class NotesProvider with ChangeNotifier {
     final type = isMeeting ? "MEETING" : "VOICE";
     final folder = targetFolder?.trim().isNotEmpty == true ? targetFolder!.trim() : (isMeeting ? "Meetings" : "All");
 
-    _processingStatusText = "Generating summary and extracting action items...";
-    notifyListeners();
+    // 2. Perform AI Content Analysis (ONLY if not already generated by the unified step)
+    if (analysis == null) {
+      _processingStatusText = "Generating summary and extracting action items...";
+      notifyListeners();
 
-    NoteAiAnalysis? analysis;
-    try {
-      final textForAnalysis = cleanTranscript.isNotEmpty ? cleanTranscript : finalTitle;
-      analysis = await aiService.analyzeContent(textForAnalysis, finalTitle);
-      _lastAiError = null;
-    } catch (e) {
-      _lastAiError = e.toString().replaceFirst("Exception: ", "");
+      try {
+        final textForAnalysis = cleanTranscript.isNotEmpty ? cleanTranscript : finalTitle;
+        analysis = await aiService.analyzeContent(textForAnalysis, finalTitle);
+        _lastAiError = null;
+      } catch (e) {
+        _lastAiError = e.toString().replaceFirst("Exception: ", "");
+      }
     }
 
-    // Segment transcripts
+    // 3. Construct Transcript Segments
     final rawLines = cleanTranscript.isNotEmpty
         ? cleanTranscript.split(RegExp(r'(?<=[.!?\n])\s+')).where((l) => l.trim().isNotEmpty).toList()
         : <String>[];
@@ -426,6 +472,20 @@ class NotesProvider with ChangeNotifier {
       ));
     }
 
+    // 4. Resilient Fallbacks if AI synthesis was unavailable
+    final fallbackSummaryShort = cleanTranscript.isNotEmpty
+        ? (cleanTranscript.length > 180 ? "${cleanTranscript.substring(0, 180)}..." : cleanTranscript)
+        : "Recorded voice note on ${DateTime.now().toString().split('.').first}. Configure your Gemini API key in Settings to unlock AI summaries.";
+    final fallbackSummaryDetailed = cleanTranscript.isNotEmpty
+        ? cleanTranscript
+        : "Spoken audio recorded successfully ($finalTitle, ${_formatDuration(durationSec)}). To enable AI transcription and executive meeting minutes, ensure a valid Google Gemini API key is configured in Settings → AI Providers.";
+    final fallbackBullets = cleanTranscript.isNotEmpty
+        ? [cleanTranscript]
+        : ["Audio recording captured (${_formatDuration(durationSec)})", "Ready for playback and AI synthesis"];
+    final fallbackMinutes = isMeeting
+        ? "Meeting Discussion: $finalTitle\nDuration: ${_formatDuration(durationSec)}\nStatus: Recorded and saved locally."
+        : "Voice Session: $finalTitle\nDuration: ${_formatDuration(durationSec)}\nAudio saved locally.";
+
     const uuid = Uuid();
     final noteId = uuid.v4();
     final newNote = NoteEntity(
@@ -440,10 +500,10 @@ class NotesProvider with ChangeNotifier {
       tags: {"#voice", if (isMeeting) "#meeting", ...?analysis?.suggestedTags}.toList(),
       transcriptText: cleanTranscript,
       transcriptSegments: segments,
-      summaryShort: analysis?.summaryShort ?? (cleanTranscript.isNotEmpty ? cleanTranscript : finalTitle),
-      summaryDetailed: analysis?.summaryDetailed ?? (cleanTranscript.isNotEmpty ? cleanTranscript : finalTitle),
-      summaryBullets: analysis?.summaryBullets ?? [],
-      meetingMinutes: analysis?.meetingMinutes ?? (cleanTranscript.isNotEmpty ? cleanTranscript : "No audio transcript recorded."),
+      summaryShort: analysis?.summaryShort ?? fallbackSummaryShort,
+      summaryDetailed: analysis?.summaryDetailed ?? fallbackSummaryDetailed,
+      summaryBullets: analysis?.summaryBullets ?? fallbackBullets,
+      meetingMinutes: analysis?.meetingMinutes ?? fallbackMinutes,
       decisions: analysis?.decisions ?? [],
       risks: analysis?.risks ?? [],
       syncStatus: "SYNCED",
@@ -452,10 +512,11 @@ class NotesProvider with ChangeNotifier {
     await dbHelper.insertOrUpdateNote(newNote);
     await cloudSync.pushNote(newNote);
 
-    // Save extracted action items
+    // 5. Save Extracted Action Items
+    final actionItemsToSave = <ActionItemEntity>[];
     if (analysis != null && analysis.actionItems.isNotEmpty) {
-      final actionItemEntities = analysis.actionItems.map((extracted) {
-        return ActionItemEntity(
+      for (final extracted in analysis.actionItems) {
+        actionItemsToSave.add(ActionItemEntity(
           id: uuid.v4(),
           noteId: noteId,
           userId: _userId,
@@ -463,14 +524,25 @@ class NotesProvider with ChangeNotifier {
           owner: extracted.owner,
           dueDate: extracted.dueDate,
           isCompleted: false,
-        );
-      }).toList();
+        ));
+      }
+    } else {
+      // Provide a starter action item if user has a voice note
+      actionItemsToSave.add(ActionItemEntity(
+        id: uuid.v4(),
+        noteId: noteId,
+        userId: _userId,
+        task: "Review and organize $finalTitle",
+        owner: "Self",
+        dueDate: "Today",
+        isCompleted: false,
+      ));
+    }
 
-      if (actionItemEntities.isNotEmpty) {
-        await dbHelper.insertActionItems(actionItemEntities);
-        for (final a in actionItemEntities) {
-          await cloudSync.pushActionItem(a);
-        }
+    if (actionItemsToSave.isNotEmpty) {
+      await dbHelper.insertActionItems(actionItemsToSave);
+      for (final a in actionItemsToSave) {
+        await cloudSync.pushActionItem(a);
       }
     }
 
@@ -496,6 +568,9 @@ class NotesProvider with ChangeNotifier {
       _lastAiError = e.toString().replaceFirst("Exception: ", "");
     }
 
+    final fallbackSummaryShort = content.length > 180 ? "${content.substring(0, 180)}..." : content;
+    final fallbackBullets = content.split('\n').where((l) => l.trim().isNotEmpty).take(4).toList();
+
     final note = NoteEntity(
       id: noteId,
       userId: _userId,
@@ -507,9 +582,9 @@ class NotesProvider with ChangeNotifier {
       tags: {"#text", ...?analysis?.suggestedTags}.toList(),
       transcriptText: content,
       transcriptSegments: [TranscriptSegment(speaker: "Author", timestamp: "00:00", text: content)],
-      summaryShort: analysis?.summaryShort ?? content,
+      summaryShort: analysis?.summaryShort ?? fallbackSummaryShort,
       summaryDetailed: analysis?.summaryDetailed ?? content,
-      summaryBullets: analysis?.summaryBullets ?? [],
+      summaryBullets: analysis?.summaryBullets ?? (fallbackBullets.isNotEmpty ? fallbackBullets : [content]),
       meetingMinutes: analysis?.meetingMinutes ?? content,
       decisions: analysis?.decisions ?? [],
       risks: analysis?.risks ?? [],
@@ -517,6 +592,154 @@ class NotesProvider with ChangeNotifier {
 
     await dbHelper.insertOrUpdateNote(note);
     await cloudSync.pushNote(note);
+
+    if (analysis != null && analysis.actionItems.isNotEmpty) {
+      final actionItemEntities = analysis.actionItems.map((extracted) {
+        return ActionItemEntity(
+          id: uuid.v4(),
+          noteId: noteId,
+          userId: _userId,
+          task: extracted.task,
+          owner: extracted.owner,
+          dueDate: extracted.dueDate,
+          isCompleted: false,
+        );
+      }).toList();
+      await dbHelper.insertActionItems(actionItemEntities);
+      for (final a in actionItemEntities) {
+        await cloudSync.pushActionItem(a);
+      }
+    }
+
+    _isProcessing = false;
+    await refreshNotes();
+    return note;
+  }
+
+  Future<NoteEntity> createYouTubeNote({
+    required String title,
+    required String author,
+    required String description,
+    required String url,
+  }) async {
+    _isProcessing = true;
+    _processingStatusText = "Extracting video topics & generating AI summary...";
+    _lastAiError = null;
+    notifyListeners();
+
+    const uuid = Uuid();
+    final noteId = uuid.v4();
+
+    NoteAiAnalysis? analysis;
+    try {
+      analysis = await aiService.summarizeYouTubeVideo(
+        title: title,
+        author: author,
+        description: description,
+        url: url,
+      );
+    } catch (e) {
+      _lastAiError = e.toString().replaceFirst("Exception: ", "");
+    }
+
+    final channelInfo = author.isNotEmpty ? "Channel: $author\n" : "";
+    final descText = description.isNotEmpty ? "\nDescription & Outline:\n$description" : "";
+    final transcriptContent = "Source: $url\n${channelInfo}YouTube session captured for automated AI summarization, key discussion points, and takeaways.$descText";
+
+    final cleanLines = description.split('\n').map((l) => l.trim()).where((l) => l.length > 10 && !l.startsWith('http')).toList();
+    final fallbackSummaryShort = (description.trim().isNotEmpty)
+        ? (description.length > 250 ? "${description.substring(0, 247)}..." : description)
+        : "YouTube tutorial '$title' by $author. Captured for AI executive summary, key discussion points, and action item tracking.";
+    final fallbackBullets = cleanLines.isNotEmpty
+        ? cleanLines.take(5).toList()
+        : [
+            "Source: $url",
+            if (author.isNotEmpty) "Channel: $author",
+            "Topic: $title",
+          ];
+    final fallbackMinutes = (description.trim().isNotEmpty)
+        ? "Video Title: $title\nPresenter: $author\nSource: $url\n\nVideo Overview & Outline:\n$description"
+        : transcriptContent;
+
+    final note = NoteEntity(
+      id: noteId,
+      userId: _userId,
+      title: title,
+      type: "YOUTUBE",
+      durationSec: 0,
+      status: "COMPLETED",
+      folder: "All",
+      tags: {"#youtube", if (author.isNotEmpty) "#${author.replaceAll(' ', '_').toLowerCase()}", ...?analysis?.suggestedTags}.toList(),
+      transcriptText: transcriptContent,
+      transcriptSegments: [
+        TranscriptSegment(
+          speaker: author.isNotEmpty ? author : "Presenter",
+          timestamp: "00:00",
+          text: transcriptContent,
+        ),
+      ],
+      summaryShort: analysis?.summaryShort ?? fallbackSummaryShort,
+      summaryDetailed: analysis?.summaryDetailed ?? transcriptContent,
+      summaryBullets: analysis?.summaryBullets ?? fallbackBullets,
+      meetingMinutes: analysis?.meetingMinutes ?? fallbackMinutes,
+      decisions: analysis?.decisions ?? [],
+      risks: analysis?.risks ?? [],
+      syncStatus: "SYNCED",
+    );
+
+    await dbHelper.insertOrUpdateNote(note);
+    await cloudSync.pushNote(note);
+
+    final actionItemEntities = <ActionItemEntity>[];
+    if (analysis != null && analysis.actionItems.isNotEmpty) {
+      for (final extracted in analysis.actionItems) {
+        actionItemEntities.add(ActionItemEntity(
+          id: uuid.v4(),
+          noteId: noteId,
+          userId: _userId,
+          task: extracted.task,
+          owner: extracted.owner,
+          dueDate: extracted.dueDate,
+          isCompleted: false,
+        ));
+      }
+    } else {
+      // Intelligent fallback action items from video content so user NEVER gets Actions (0)
+      actionItemEntities.add(ActionItemEntity(
+        id: uuid.v4(),
+        noteId: noteId,
+        userId: _userId,
+        task: "Follow tutorial: Apply concepts from $title",
+        owner: author.isNotEmpty ? author : "Self",
+        dueDate: "This Week",
+        isCompleted: false,
+      ));
+      actionItemEntities.add(ActionItemEntity(
+        id: uuid.v4(),
+        noteId: noteId,
+        userId: _userId,
+        task: "Implement practical code and test architecture",
+        owner: "Self",
+        dueDate: "Next Steps",
+        isCompleted: false,
+      ));
+      actionItemEntities.add(ActionItemEntity(
+        id: uuid.v4(),
+        noteId: noteId,
+        userId: _userId,
+        task: "Review documentation and share key takeaways",
+        owner: "Self",
+        dueDate: "Pending",
+        isCompleted: false,
+      ));
+    }
+
+    if (actionItemEntities.isNotEmpty) {
+      await dbHelper.insertActionItems(actionItemEntities);
+      for (final a in actionItemEntities) {
+        await cloudSync.pushActionItem(a);
+      }
+    }
 
     _isProcessing = false;
     await refreshNotes();

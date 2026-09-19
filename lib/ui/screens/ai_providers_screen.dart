@@ -16,7 +16,7 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
 
   String _selectedProvider = 'gemini';
   late TextEditingController _apiKeyController;
-  String _selectedModel = 'gemini-2.5-flash';
+  String _selectedModel = 'gemini-3.6-flash';
   String _selectedLanguage = 'Auto';
 
   bool _isTesting = false;
@@ -159,7 +159,7 @@ class _AiProvidersScreenState extends State<AiProvidersScreen> {
         return ['claude-3-5-haiku-20241022', 'claude-3-5-sonnet-20241022', 'claude-3-opus-20240229'];
       case 'gemini':
       default:
-        return ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+        return ['gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.5-flash', 'gemini-3.7-flash'];
     }
   }
 

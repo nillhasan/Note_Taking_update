@@ -310,10 +310,10 @@ class DatabaseHelper {
       await insertFolders(defaultFolders);
     }
 
-    const sampleId = "sample_note_01";
-    final existing = await getNoteById(sampleId);
-    if (existing == null) {
+    final userNotes = await getActiveNotes(userId);
+    if (userNotes.isEmpty) {
       const uuid = Uuid();
+      final sampleId = "sample_note_${userId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}";
       final starterNote = NoteEntity(
         id: sampleId,
         userId: userId,

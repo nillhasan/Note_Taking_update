@@ -46,10 +46,10 @@ class RootGate extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
 
-    if (auth.isLoading && auth.currentUser == null) {
+    if (auth.isInitializing || (auth.isLoading && auth.currentUser == null)) {
       return const Scaffold(
         body: Center(
-          child: CircularProgressIndicator(color: AppColors.primarySky),
+          child: CircularProgressIndicator(color: AppColors.accentDark),
         ),
       );
     }

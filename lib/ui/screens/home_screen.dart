@@ -22,16 +22,34 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSearchVisible = false;
   final TextEditingController _searchController = TextEditingController();
 
+  final List<Map<String, dynamic>> _filterCategories = [
+    {"id": "All", "label": "All", "icon": Icons.notes},
+    {"id": "Voice", "label": "Voice", "icon": Icons.mic},
+    {"id": "Meetings", "label": "Meetings", "icon": Icons.people_outline},
+    {"id": "Favorites", "label": "Favorites", "icon": Icons.star_border},
+    {"id": "Archived", "label": "Archived", "icon": Icons.archive_outlined},
+  ];
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       final notes = Provider.of<NotesProvider>(context, listen: false);
-      if (auth.currentUser != null) {
-        notes.updateUserId(auth.currentUser!.id);
-      }
+      final currentUserId = auth.currentUser?.id ?? "guest_user";
+      notes.updateUserId(currentUserId);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = Provider.of<AuthProvider>(context);
+    final notes = Provider.of<NotesProvider>(context, listen: false);
+    final currentUserId = auth.currentUser?.id ?? "guest_user";
+    if (notes.userId != currentUserId) {
+      notes.updateUserId(currentUserId);
+    }
   }
 
   @override
@@ -69,9 +87,9 @@ class _HomeScreenState extends State<HomeScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Header (Screenshot 2)
+                // Top Header
                 Padding(
-                  padding: const EdgeInsets.only(left: 20, right: 16, top: 16, bottom: 8),
+                  padding: const EdgeInsets.only(left: 20, right: 16, top: 16, bottom: 4),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -99,10 +117,12 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            const Text(
-                              "Today",
-                              style: TextStyle(
-                                fontSize: 16,
+                            Text(
+                              notesProvider.selectedFilter == "All"
+                                  ? "All Notes (${notes.length})"
+                                  : "${notesProvider.selectedFilter} (${notes.length})",
+                              style: const TextStyle(
+                                fontSize: 15,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.textSecondary,
                               ),
@@ -158,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Collapsible Search Field
                 if (_isSearchVisible)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
                     child: TextField(
                       controller: _searchController,
                       onChanged: (val) => notesProvider.setSearchQuery(val),
@@ -179,6 +199,91 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
+                // Category Filter Bar (All, Voice, Meetings, Favorites, Archived)
+                Container(
+                  height: 44,
+                  margin: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _filterCategories.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (ctx, i) {
+                      final cat = _filterCategories[i];
+                      final isSelected = notesProvider.selectedFilter == cat["id"];
+                      return GestureDetector(
+                        onTap: () {
+                          notesProvider.setFilter(cat["id"] as String);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.accentDark : AppColors.surface,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected ? AppColors.accentDark : AppColors.cardBorder,
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                cat["icon"] as IconData,
+                                size: 16,
+                                color: isSelected ? Colors.white : AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                cat["label"] as String,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  color: isSelected ? Colors.white : AppColors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                // AI Processing Status Indicator
+                if (notesProvider.isProcessing)
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentDark.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.accentDark.withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentDark),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            notesProvider.processingStatusText,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 // Notes List
                 Expanded(
                   child: notes.isEmpty
@@ -190,9 +295,15 @@ class _HomeScreenState extends State<HomeScreen> {
                               children: [
                                 const Icon(Icons.notes, size: 48, color: AppColors.textMuted),
                                 const SizedBox(height: 16),
-                                const Text(
-                                  "No notes yet",
-                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                                Text(
+                                  notesProvider.selectedFilter == "All"
+                                      ? "No notes yet"
+                                      : "No ${notesProvider.selectedFilter.toLowerCase()} notes",
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimary,
+                                  ),
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
@@ -258,7 +369,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
 
-            // Bottom Dock matching Screenshot 2 (Floating Capsule + Mic Button)
+            // Bottom Dock (Floating Capsule + Mic Button)
             Positioned(
               left: 20,
               right: 20,
@@ -283,24 +394,34 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Left: Transcripts Tab
+                        // Left: Transcripts Tab (toggles Voice filter)
                         InkWell(
                           onTap: () {
-                            notesProvider.setFilter("All");
+                            notesProvider.setFilter(
+                              notesProvider.selectedFilter == "Voice" ? "All" : "Voice",
+                            );
                           },
                           borderRadius: const BorderRadius.horizontal(left: Radius.circular(28)),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 20),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.graphic_eq, size: 20, color: AppColors.iconColor),
-                                SizedBox(height: 2),
+                                Icon(
+                                  Icons.graphic_eq,
+                                  size: 20,
+                                  color: notesProvider.selectedFilter == "Voice"
+                                      ? AppColors.recordingRed
+                                      : AppColors.iconColor,
+                                ),
+                                const SizedBox(height: 2),
                                 Text(
                                   "Transcripts",
                                   style: TextStyle(
                                     fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: notesProvider.selectedFilter == "Voice"
+                                        ? FontWeight.w700
+                                        : FontWeight.w600,
                                     color: AppColors.textPrimary,
                                   ),
                                 ),
@@ -345,7 +466,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const Spacer(),
 
-                  // Floating Circular Microphone Button (Right side, Screenshot 2)
+                  // Floating Circular Microphone Button
                   GestureDetector(
                     onTap: _openRecordingStudio,
                     child: Container(

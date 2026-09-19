@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../state/auth_provider.dart';
@@ -12,8 +13,8 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   bool _isSignUp = false;
-  final _emailController = TextEditingController(text: "elena@enterprise.com");
-  final _passwordController = TextEditingController(text: "password123");
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -30,7 +31,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _showForgotPasswordModal() {
-    final resetEmailController = TextEditingController(text: _emailController.text);
+    final resetEmailController = TextEditingController(text: _emailController.text.trim());
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -53,10 +54,10 @@ class _AuthScreenState extends State<AuthScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  "Forgot Password",
+                  "Reset Password",
                   style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
                   ),
                 ),
@@ -68,8 +69,8 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              "Enter your registered email address and we'll send you a link to reset your password.",
-              style: TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4),
+              "Enter your registered email address and we will send you a password reset link.",
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -77,6 +78,7 @@ class _AuthScreenState extends State<AuthScreen> {
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(
                 labelText: "Email address",
+                hintText: "you@example.com",
                 prefixIcon: Icon(Icons.email_outlined, size: 20),
               ),
             ),
@@ -166,48 +168,82 @@ class _AuthScreenState extends State<AuthScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
+              constraints: const BoxConstraints(maxWidth: 400),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Minimal Brand Header
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
+
+                  // Brand Icon & Title
+                  Center(
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF2C3E50), Color(0xFF1A252F)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // App Name
                   const Text(
                     "NoteFlow AI",
+                    textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 28,
+                      fontSize: 26,
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
                       letterSpacing: -0.5,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
+
+                  // Subtitle
                   Text(
-                    _isSignUp ? "Create Account" : "Welcome back",
+                    _isSignUp ? "Create your account to get started" : "Smart Voice & Meeting Notes",
+                    textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
                       color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 32),
 
                   // Error Banner
-                  if (auth.authError != null)
+                  if (auth.authError != null) ...[
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       margin: const EdgeInsets.only(bottom: 20),
                       decoration: BoxDecoration(
                         color: AppColors.recordingRed.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.recordingRed.withValues(alpha: 0.3)),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.recordingRed.withValues(alpha: 0.25)),
                       ),
                       child: Row(
                         children: [
                           const Icon(Icons.error_outline, size: 18, color: AppColors.recordingRed),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               auth.authError!,
@@ -221,14 +257,76 @@ class _AuthScreenState extends State<AuthScreen> {
                         ],
                       ),
                     ),
+                  ],
 
-                  // Sign Up: Full Name
+                  // 1. Prominent Google Sign-In Button
+                  SizedBox(
+                    height: 50,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.textPrimary,
+                        backgroundColor: AppColors.surface,
+                        side: const BorderSide(color: AppColors.cardBorder, width: 1.2),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      onPressed: auth.isLoading ? null : () => auth.signInWithGoogle(),
+                      child: auth.isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textPrimary),
+                            )
+                          : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                GoogleGLogo(size: 20),
+                                SizedBox(width: 12),
+                                Text(
+                                  "Continue with Google",
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Clean Divider
+                  Row(
+                    children: [
+                      Expanded(child: Container(height: 1, color: AppColors.cardBorder.withValues(alpha: 0.7))),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(
+                          _isSignUp ? "or register with email" : "or continue with email",
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
+                      Expanded(child: Container(height: 1, color: AppColors.cardBorder.withValues(alpha: 0.7))),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // Full Name (only in Sign Up mode)
                   if (_isSignUp) ...[
                     TextField(
                       controller: _nameController,
                       textCapitalization: TextCapitalization.words,
                       decoration: const InputDecoration(
                         labelText: "Full Name",
+                        hintText: "Mohammed Dalilur Hasan",
                         prefixIcon: Icon(Icons.person_outline, size: 20),
                       ),
                     ),
@@ -241,6 +339,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(
                       labelText: "Email",
+                      hintText: "you@example.com",
                       prefixIcon: Icon(Icons.email_outlined, size: 20),
                     ),
                   ),
@@ -252,18 +351,20 @@ class _AuthScreenState extends State<AuthScreen> {
                     obscureText: _obscurePassword,
                     decoration: InputDecoration(
                       labelText: "Password",
+                      hintText: "••••••••",
                       prefixIcon: const Icon(Icons.lock_outline, size: 20),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                           size: 20,
+                          color: AppColors.iconColor,
                         ),
                         onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                       ),
                     ),
                   ),
 
-                  // Sign Up: Confirm Password
+                  // Confirm Password (only in Sign Up mode)
                   if (_isSignUp) ...[
                     const SizedBox(height: 14),
                     TextField(
@@ -271,11 +372,13 @@ class _AuthScreenState extends State<AuthScreen> {
                       obscureText: _obscureConfirmPassword,
                       decoration: InputDecoration(
                         labelText: "Confirm Password",
+                        hintText: "••••••••",
                         prefixIcon: const Icon(Icons.lock_outline, size: 20),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                             size: 20,
+                            color: AppColors.iconColor,
                           ),
                           onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
                         ),
@@ -283,15 +386,15 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ],
 
-                  // Forgot Password (Sign In mode)
+                  // Forgot Password (only in Sign In mode)
                   if (!_isSignUp) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: _showForgotPasswordModal,
                         style: TextButton.styleFrom(
-                          padding: EdgeInsets.zero,
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
@@ -299,7 +402,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           "Forgot password?",
                           style: TextStyle(
                             fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w500,
                             color: AppColors.textSecondary,
                           ),
                         ),
@@ -309,20 +412,21 @@ class _AuthScreenState extends State<AuthScreen> {
 
                   const SizedBox(height: 20),
 
-                  // Primary Button
+                  // Primary Submit Button
                   SizedBox(
-                    height: 48,
+                    height: 50,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.accentDark,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       ),
                       onPressed: auth.isLoading ? null : _handleAuthSubmit,
                       child: auth.isLoading
                           ? const SizedBox(
-                              width: 18,
-                              height: 18,
+                              width: 20,
+                              height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
                           : Text(
@@ -334,97 +438,41 @@ class _AuthScreenState extends State<AuthScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Divider OR
+                  // Switch between Sign In / Sign Up
                   Row(
-                    children: [
-                      Expanded(child: Container(height: 1, color: AppColors.cardBorder)),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 14),
-                        child: Text(
-                          "OR",
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ),
-                      Expanded(child: Container(height: 1, color: AppColors.cardBorder)),
-                    ],
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Continue with Google
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: AppColors.cardBorder),
-                      backgroundColor: AppColors.surface,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    icon: const Icon(Icons.g_mobiledata, size: 24, color: AppColors.textPrimary),
-                    label: const Text(
-                      "Continue with Google",
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                    ),
-                    onPressed: auth.isLoading ? null : () => auth.signInWithGoogle(),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  // Continue with Apple
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: AppColors.textPrimary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    icon: const Icon(Icons.apple, size: 22, color: Colors.white),
-                    label: const Text(
-                      "Continue with Apple",
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                    ),
-                    onPressed: auth.isLoading ? null : () => auth.signInWithApple(),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Toggle Sign In / Sign Up
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         _isSignUp ? "Already have an account?" : "Don't have an account?",
                         style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
                       ),
                       const SizedBox(width: 4),
-                      TextButton(
-                        onPressed: () {
+                      GestureDetector(
+                        onTap: () {
                           auth.clearError();
                           setState(() => _isSignUp = !_isSignUp);
                         },
                         child: Text(
-                          _isSignUp ? "Sign In" : "Create Account",
+                          _isSignUp ? "Sign In" : "Sign Up",
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
+                            color: AppColors.accentDark,
                           ),
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
 
-                  // Continue as Guest
+                  // Clean Guest Access Link
                   Center(
                     child: TextButton(
-                      onPressed: () => auth.continueAsGuest(),
+                      onPressed: auth.isLoading ? null : () => auth.continueAsGuest(),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      ),
                       child: const Text(
                         "Continue as Guest",
                         style: TextStyle(
@@ -443,4 +491,83 @@ class _AuthScreenState extends State<AuthScreen> {
       ),
     );
   }
+}
+
+/// Official 4-Color Google "G" Logo Icon
+class GoogleGLogo extends StatelessWidget {
+  final double size;
+
+  const GoogleGLogo({super.key, this.size = 20});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _GoogleGLogoPainter(),
+      ),
+    );
+  }
+}
+
+class _GoogleGLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final center = Offset(w / 2, h / 2);
+    final radius = w / 2;
+    final strokeWidth = w * 0.22;
+    final drawRadius = radius - strokeWidth / 2;
+
+    final rect = Rect.fromCircle(center: center, radius: drawRadius);
+
+    // Red arc (top-left)
+    final redPaint = Paint()
+      ..color = const Color(0xFFEA4335)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt;
+    canvas.drawArc(rect, -math.pi * 0.75, math.pi * 0.5, false, redPaint);
+
+    // Yellow arc (bottom-left)
+    final yellowPaint = Paint()
+      ..color = const Color(0xFFFBBC05)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt;
+    canvas.drawArc(rect, math.pi * 0.75, math.pi * 0.5, false, yellowPaint);
+
+    // Green arc (bottom-right)
+    final greenPaint = Paint()
+      ..color = const Color(0xFF34A853)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt;
+    canvas.drawArc(rect, math.pi * 0.25, math.pi * 0.5, false, greenPaint);
+
+    // Blue arc (top-right)
+    final bluePaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt;
+    canvas.drawArc(rect, -math.pi * 0.25, math.pi * 0.4, false, bluePaint);
+
+    // Blue horizontal bar
+    final barPaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.fill;
+    final barRect = Rect.fromLTWH(
+      center.dx - w * 0.05,
+      center.dy - strokeWidth / 2,
+      drawRadius + strokeWidth / 2 + w * 0.05,
+      strokeWidth,
+    );
+    canvas.drawRect(barRect, barPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

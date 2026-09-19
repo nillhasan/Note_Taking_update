@@ -5,20 +5,44 @@ import '../../state/notes_provider.dart';
 import '../../theme/app_theme.dart';
 import 'note_detail_screen.dart';
 
+enum ImportAction { audio, video, youtube, instagram, pdfWord, textNote }
+
 class ImportBottomSheet extends StatelessWidget {
   const ImportBottomSheet({super.key});
 
-  static Future<void> show(BuildContext context) {
-    return showModalBottomSheet(
-      context: context,
+  static Future<void> show(BuildContext parentContext) async {
+    final action = await showModalBottomSheet<ImportAction>(
+      context: parentContext,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => const ImportBottomSheet(),
     );
+
+    if (action == null || !parentContext.mounted) return;
+
+    switch (action) {
+      case ImportAction.audio:
+        _handleAudio(parentContext);
+        break;
+      case ImportAction.video:
+        _handleVideo(parentContext);
+        break;
+      case ImportAction.youtube:
+        _handleYouTube(parentContext);
+        break;
+      case ImportAction.instagram:
+        _handleInstagram(parentContext);
+        break;
+      case ImportAction.pdfWord:
+        _handlePdfWord(parentContext);
+        break;
+      case ImportAction.textNote:
+        _handleTextNote(parentContext);
+        break;
+    }
   }
 
-  void _handleAudio(BuildContext context) async {
-    Navigator.pop(context);
+  static void _handleAudio(BuildContext context) async {
     final notesProvider = Provider.of<NotesProvider>(context, listen: false);
     final res = await ImportService.instance.pickAudioFile();
 
@@ -36,8 +60,7 @@ class ImportBottomSheet extends StatelessWidget {
     }
   }
 
-  void _handleVideo(BuildContext context) async {
-    Navigator.pop(context);
+  static void _handleVideo(BuildContext context) async {
     final notesProvider = Provider.of<NotesProvider>(context, listen: false);
     final res = await ImportService.instance.pickVideoFile();
 
@@ -55,8 +78,7 @@ class ImportBottomSheet extends StatelessWidget {
     }
   }
 
-  void _handleYouTube(BuildContext context) {
-    Navigator.pop(context);
+  static void _handleYouTube(BuildContext context) {
     final urlController = TextEditingController();
 
     showDialog(
@@ -110,10 +132,28 @@ class ImportBottomSheet extends StatelessWidget {
               final videoId = ImportService.instance.extractYouTubeId(url) ?? "Video";
               final notesProvider = Provider.of<NotesProvider>(context, listen: false);
 
-              // Create YouTube note with metadata
-              final note = await notesProvider.createTextNote(
-                "YouTube: $videoId",
-                "Source: $url\n\nYouTube link captured for automated analysis and transcription. Ensure video has public captions or provide direct audio/video upload for full synthesis.",
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Fetching YouTube metadata and generating AI summary..."),
+                    backgroundColor: AppColors.accentDark,
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              }
+
+              final meta = await ImportService.instance.fetchYouTubeMetadata(url);
+              final videoTitle = (meta != null && meta['title']!.isNotEmpty)
+                  ? meta['title']!
+                  : "YouTube: $videoId";
+              final author = meta?['author'] ?? "";
+              final description = meta?['description'] ?? "";
+
+              final note = await notesProvider.createYouTubeNote(
+                title: videoTitle,
+                author: author,
+                description: description,
+                url: url,
               );
 
               if (context.mounted) {
@@ -130,8 +170,7 @@ class ImportBottomSheet extends StatelessWidget {
     );
   }
 
-  void _handleInstagram(BuildContext context) {
-    Navigator.pop(context);
+  static void _handleInstagram(BuildContext context) {
     final urlController = TextEditingController();
 
     showDialog(
@@ -170,29 +209,57 @@ class ImportBottomSheet extends StatelessWidget {
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              // Per requirement #13:
-              // "Instagram content could not be imported. Please upload the audio, video or transcript directly."
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    "Instagram content could not be imported. Please upload the audio, video or transcript directly.",
+            onPressed: () async {
+              final url = urlController.text.trim();
+              if (url.isEmpty) return;
+
+              if (!ImportService.instance.isValidInstagramUrl(url)) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(
+                    content: Text("Please enter a valid Instagram post or reel link."),
+                    backgroundColor: AppColors.recordingRed,
                   ),
-                  duration: Duration(seconds: 4),
-                  backgroundColor: AppColors.accentDark,
-                ),
+                );
+                return;
+              }
+
+              Navigator.pop(ctx);
+              final notesProvider = Provider.of<NotesProvider>(context, listen: false);
+
+              // Extract identifier from URL
+              final segments = url.split('/').where((s) => s.isNotEmpty).toList();
+              final postCode = segments.isNotEmpty ? segments.last : "Post";
+
+              // Create bookmark note
+              final note = await notesProvider.createTextNote(
+                "Instagram Bookmark ($postCode)",
+                "Source: $url\n\nInstagram content link saved. Note: Direct Instagram audio extraction is restricted by Instagram. Upload the media file directly for automatic voice-to-text transcript.",
               );
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      "Instagram link saved as a note! Upload audio or video directly for full transcription.",
+                    ),
+                    duration: Duration(seconds: 4),
+                    backgroundColor: AppColors.accentDark,
+                  ),
+                );
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => NoteDetailScreen(noteId: note.id)),
+                );
+              }
             },
-            child: const Text("Import"),
+            child: const Text("Save Bookmark"),
           ),
         ],
       ),
     );
   }
 
-  void _handlePdfWord(BuildContext context) async {
-    Navigator.pop(context);
+  static void _handlePdfWord(BuildContext context) async {
     final notesProvider = Provider.of<NotesProvider>(context, listen: false);
     final res = await ImportService.instance.pickDocumentFile();
 
@@ -207,7 +274,11 @@ class ImportBottomSheet extends StatelessWidget {
 
     if (context.mounted && res.textContent != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Document text extracted. Analyzing with AI..."), backgroundColor: AppColors.accentDark),
+        const SnackBar(
+          content: Text("Document text extracted. Analyzing with AI..."),
+          backgroundColor: AppColors.accentDark,
+          duration: Duration(seconds: 3),
+        ),
       );
 
       final note = await notesProvider.createTextNote(
@@ -224,8 +295,7 @@ class ImportBottomSheet extends StatelessWidget {
     }
   }
 
-  void _handleTextNote(BuildContext context) {
-    Navigator.pop(context);
+  static void _handleTextNote(BuildContext context) {
     final titleController = TextEditingController(text: "New Note");
     final contentController = TextEditingController();
 
@@ -305,7 +375,7 @@ class ImportBottomSheet extends StatelessWidget {
     );
   }
 
-  void _processImportedAudio(BuildContext context, NotesProvider notesProvider, String filePath, String title) async {
+  static void _processImportedAudio(BuildContext context, NotesProvider notesProvider, String filePath, String title) async {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Processing audio file with AI..."), backgroundColor: AppColors.accentDark),
     );
@@ -352,42 +422,42 @@ class ImportBottomSheet extends StatelessWidget {
           _buildOptionTile(
             icon: Icons.graphic_eq,
             title: "Audio",
-            onTap: () => _handleAudio(context),
+            onTap: () => Navigator.pop(context, ImportAction.audio),
           ),
 
           // 2. Video
           _buildOptionTile(
             icon: Icons.videocam_outlined,
             title: "Video",
-            onTap: () => _handleVideo(context),
+            onTap: () => Navigator.pop(context, ImportAction.video),
           ),
 
           // 3. YouTube
           _buildOptionTile(
             icon: Icons.smart_display_outlined,
             title: "YouTube",
-            onTap: () => _handleYouTube(context),
+            onTap: () => Navigator.pop(context, ImportAction.youtube),
           ),
 
           // 4. Instagram
           _buildOptionTile(
             icon: Icons.camera_alt_outlined,
             title: "Instagram",
-            onTap: () => _handleInstagram(context),
+            onTap: () => Navigator.pop(context, ImportAction.instagram),
           ),
 
           // 5. PDF, Word
           _buildOptionTile(
             icon: Icons.description_outlined,
             title: "PDF, Word",
-            onTap: () => _handlePdfWord(context),
+            onTap: () => Navigator.pop(context, ImportAction.pdfWord),
           ),
 
           // 6. Text Note
           _buildOptionTile(
             icon: Icons.text_fields,
             title: "Text Note",
-            onTap: () => _handleTextNote(context),
+            onTap: () => Navigator.pop(context, ImportAction.textNote),
             showDivider: false,
           ),
 

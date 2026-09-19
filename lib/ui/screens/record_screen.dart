@@ -165,6 +165,7 @@ class _RecordScreenState extends State<RecordScreen> {
       );
 
       if (mounted) {
+        final errorMsg = notesProvider.lastAiError;
         setState(() => _isProcessing = false);
         Navigator.pop(context); // Close recording sheet
         Navigator.push(
@@ -173,6 +174,15 @@ class _RecordScreenState extends State<RecordScreen> {
             builder: (_) => NoteDetailScreen(noteId: newNote.id),
           ),
         );
+        if (errorMsg != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Note saved locally. AI Notice: $errorMsg"),
+              backgroundColor: AppColors.accentDark,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

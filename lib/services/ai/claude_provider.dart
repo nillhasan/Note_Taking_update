@@ -104,6 +104,19 @@ class ClaudeProvider implements AiProvider {
     return null;
   }
 
+  static String? _extractContentText(Map<String, dynamic> decoded) {
+    try {
+      final contentList = decoded['content'];
+      if (contentList is List && contentList.isNotEmpty) {
+        final firstItem = contentList[0];
+        if (firstItem is Map && firstItem['text'] != null) {
+          return firstItem['text'].toString();
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   @override
   Future<NoteAiAnalysis> analyzeContent(String content, String title, {String? language, String? model, String? apiKey}) async {
     final key = await _getEffectiveKey(apiKey);
@@ -123,7 +136,7 @@ class ClaudeProvider implements AiProvider {
     final systemPrompt = AiParserHelper.buildSystemPrompt(language: language);
     final userPrompt = '''
 Note Title: "$title"
-Content:
+Content to analyze:
 """
 $content
 """
@@ -144,7 +157,7 @@ $content
           'max_tokens': 2048,
           'system': systemPrompt,
           'messages': [
-            {'role': 'user', 'content': userPrompt},
+            {'role': 'user', 'content': userPrompt}
           ],
         }),
       ).timeout(const Duration(seconds: 40));
@@ -155,8 +168,7 @@ $content
 
       if (res.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-        final contentList = decoded['content'] as List?;
-        final text = contentList?.firstOrNull?['text'] as String?;
+        final text = _extractContentText(decoded);
         if (text != null && text.trim().isNotEmpty) {
           return AiParserHelper.parseAiResponse(text, title);
         }
@@ -218,8 +230,7 @@ $content
 
       if (res.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-        final contentList = decoded['content'] as List?;
-        final text = contentList?.firstOrNull?['text'] as String?;
+        final text = _extractContentText(decoded);
         if (text != null && text.isNotEmpty) {
           return text.trim();
         }
@@ -270,8 +281,7 @@ $content
 
       if (res.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-        final contentList = decoded['content'] as List?;
-        final t = contentList?.firstOrNull?['text'] as String?;
+        final t = _extractContentText(decoded);
         if (t != null) return t.trim();
       } else {
         throw AiApiException("Claude rewrite failed with HTTP ${res.statusCode}.", statusCode: res.statusCode);

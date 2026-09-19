@@ -29,15 +29,18 @@ android {
         versionName = flutter.versionName
 
         ndk {
-            abiFilters.addAll(listOf("x86_64", "arm64-v8a"))
+            abiFilters.addAll(listOf("x86_64", "arm64-v8a", "armeabi-v7a"))
         }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = false
+            isShrinkResources = false
+            ndk {
+                debugSymbolLevel = "none"
+            }
         }
     }
 }

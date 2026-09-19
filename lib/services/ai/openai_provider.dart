@@ -192,8 +192,7 @@ $content
 
       if (res.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-        final choices = decoded['choices'] as List?;
-        final text = choices?.firstOrNull?['message']?['content'] as String?;
+        final text = _extractChoiceText(decoded);
         if (text != null && text.trim().isNotEmpty) {
           return AiParserHelper.parseAiResponse(text, title);
         }
@@ -216,6 +215,22 @@ $content
       if (kDebugMode) debugPrint('[AI] [OpenAI] Analysis exception: $e');
       throw AiApiException("OpenAI analysis error: $e");
     }
+  }
+
+  static String? _extractChoiceText(Map<String, dynamic> decoded) {
+    try {
+      final choices = decoded['choices'];
+      if (choices is List && choices.isNotEmpty) {
+        final firstChoice = choices[0];
+        if (firstChoice is Map) {
+          final message = firstChoice['message'];
+          if (message is Map && message['content'] != null) {
+            return message['content'].toString();
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   @override
@@ -244,7 +259,7 @@ $content
           'messages': [
             {
               'role': 'system',
-              'content': 'You are NoteFlow AI, a focused executive assistant. Answer grounded strictly in the provided note context. If not mentioned, state so clearly.'
+              'content': 'You are NoteFlow AI, an executive assistant. Answer questions strictly grounded in the provided note context. If not mentioned in the note, explicitly state so.'
             },
             {
               'role': 'user',
@@ -257,8 +272,7 @@ $content
 
       if (res.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-        final choices = decoded['choices'] as List?;
-        final text = choices?.firstOrNull?['message']?['content'] as String?;
+        final text = _extractChoiceText(decoded);
         if (text != null && text.isNotEmpty) {
           return text.trim();
         }
@@ -308,8 +322,7 @@ $content
 
       if (res.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-        final choices = decoded['choices'] as List?;
-        final t = choices?.firstOrNull?['message']?['content'] as String?;
+        final t = _extractChoiceText(decoded);
         if (t != null) return t.trim();
       } else {
         throw AiApiException("OpenAI rewrite failed with HTTP ${res.statusCode}.", statusCode: res.statusCode);

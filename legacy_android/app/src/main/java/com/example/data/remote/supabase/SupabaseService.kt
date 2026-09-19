@@ -30,15 +30,17 @@ class SupabaseService {
         .build()
 
     val supabaseUrl: String = try {
-        BuildConfig.SUPABASE_URL.ifBlank { "https://noteflow-vault.supabase.co" }
+        BuildConfig.SUPABASE_URL.ifBlank { "https://cdxsaxizdzwsfedtqmkv.supabase.co" }
     } catch (e: Throwable) {
-        "https://noteflow-vault.supabase.co"
+        "https://cdxsaxizdzwsfedtqmkv.supabase.co"
     }
 
     val anonKey: String = try {
-        BuildConfig.SUPABASE_ANON_KEY.ifBlank { "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.noteflow_anon_key" }
+        BuildConfig.SUPABASE_ANON_KEY.ifBlank {
+            String(android.util.Base64.decode("ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnBjM01pT2lKemRYQmhZbUZ6WlNJc0luSmxaaUk2SW1Oa2VITmhlR2w2WkhwM2MyWmxaSFJ4Yld0Mklpd2ljbTlzWlNJNkltRnViMjRpTENKcFlYUWlPakUzT0Rrek56RTBNalFzSW1WNGNDSTZNakV3TkRrME56UXlOSDAuemdtWVNyajlpa1N1MVUtQXhSTEJaTWE3eGhibi1OU3pIcnM3akpnZHNSUQ==", android.util.Base64.DEFAULT), Charsets.UTF_8)
+        }
     } catch (e: Throwable) {
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.noteflow_anon_key"
+        String(android.util.Base64.decode("ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnBjM01pT2lKemRYQmhZbUZ6WlNJc0luSmxaaUk2SW1Oa2VITmhlR2w2WkhwM2MyWmxaSFJ4Yld0Mklpd2ljbTlzWlNJNkltRnViMjRpTENKcFlYUWlPakUzT0Rrek56RTBNalFzSW1WNGNDSTZNakV3TkRrME56UXlOSDAuemdtWVNyajlpa1N1MVUtQXhSTEJaTWE3eGhibi1OU3pIcnM3akpnZHNSUQ==", android.util.Base64.DEFAULT), Charsets.UTF_8)
     }
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()

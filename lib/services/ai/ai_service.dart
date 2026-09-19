@@ -77,6 +77,17 @@ class AiService {
     return null;
   }
 
+  /// Fast Single-Roundtrip Multimodal Audio Transcription & Analysis
+  Future<Map<String, dynamic>?> transcribeAndAnalyzeAudio(File audioFile, String title) async {
+    final provider = await getActiveProvider();
+    if (provider.id == 'gemini') {
+      final lang = await PreferencesService.instance.getAiLanguage();
+      final result = await geminiProvider.transcribeAndAnalyzeAudio(audioFile, title, language: lang);
+      if (result != null) return result;
+    }
+    return null;
+  }
+
   /// Real Content Synthesis (Summary, Bullets, Action Items, Minutes)
   Future<NoteAiAnalysis> analyzeContent(String content, String title) async {
     final provider = await getActiveProvider();
@@ -85,6 +96,23 @@ class AiService {
     }
     final lang = await PreferencesService.instance.getAiLanguage();
     return await provider.analyzeContent(content, title, language: lang);
+  }
+
+  /// Specialized YouTube Video AI Synthesis
+  Future<NoteAiAnalysis> summarizeYouTubeVideo({
+    required String title,
+    required String author,
+    required String description,
+    required String url,
+  }) async {
+    final lang = await PreferencesService.instance.getAiLanguage();
+    return await geminiProvider.summarizeYouTubeVideo(
+      title: title,
+      author: author,
+      description: description,
+      url: url,
+      language: lang,
+    );
   }
 
   /// Grounded In-Note Q&A
